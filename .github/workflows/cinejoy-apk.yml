@@ -1,4 +1,4 @@
-name: Build Cinejoy TV V4.3 Cross-TV Remote Fix
+name: Build Cinejoy TV V4.4 Player Remote Fix
 on:
   push:
     branches:
@@ -47,8 +47,8 @@ jobs:
               applicationId 'com.personal.tvweblauncher'
               minSdk 23
               targetSdk 32
-              versionCode 7
-              versionName '4.3'
+              versionCode 8
+              versionName '4.4'
             }
             compileOptions {
               sourceCompatibility JavaVersion.VERSION_17
@@ -116,7 +116,7 @@ jobs:
           
           public final class MainActivity extends Activity {
               private static final String URL = "https://cinejoy.pk/";
-              private static final String NAV_SCRIPT = "(function(){\n if(window.__cinejoyRemote43) return;\n window.__cinejoyRemote43=true;\n var style=document.createElement('style');\n style.textContent='a:focus,button:focus,input:focus,select:focus,textarea:focus,iframe:focus,video:focus,[role=\"button\"]:focus,[tabindex]:focus,[data-cj-remote=\"1\"]:focus{outline:3px solid #7bff60!important;outline-offset:3px!important;box-shadow:0 0 0 2px rgba(0,0,0,.65)!important;}';\n (document.head||document.documentElement).appendChild(style);\n function rect(el){try{return el.getBoundingClientRect();}catch(e){return null;}}\n function valid(el){\n  if(!el||el.disabled)return false;\n  var r=rect(el);if(!r||r.width<13||r.height<12)return false;\n  var s=window.getComputedStyle(el);\n  return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&s.pointerEvents!=='none';\n }\n function onscreen(el){\n  var r=rect(el);\n  return r&&r.right>4&&r.bottom>4&&r.left<innerWidth-4&&r.top<innerHeight-4;\n }\n function isPlayer(el){return el&&/^(IFRAME|VIDEO)$/.test(el.tagName||'');}\n function focus(el){\n  if(!el)return;\n  if(!el.hasAttribute('tabindex')&&(!/^(A|BUTTON|INPUT|SELECT|TEXTAREA|VIDEO|IFRAME)$/.test(el.tagName||''))){\n   el.setAttribute('tabindex','0');el.dataset.cjRemote='1';\n  }\n  try{el.focus({preventScroll:true});}catch(e){el.focus();}\n  try{el.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}\n }\n function elements(){\n  var q='a[href],button,input,select,textarea,[role=\"button\"],[tabindex],[onclick],[class*=\"cursor-pointer\"],[style*=\"cursor: pointer\"],iframe,video';\n  var nodes=Array.from(document.querySelectorAll(q)).slice(0,1100).filter(valid);\n  // Nested clickable wrappers should not steal focus from their clickable children.\n  return nodes.filter(function(el){\n   if(isPlayer(el))return true;\n   if(el.tagName==='DIV'||el.tagName==='SPAN'){\n    var children=el.querySelectorAll('a[href],button,[role=\"button\"]');\n    if(children.length>0&&children.length<6)return false;\n   }\n   return true;\n  });\n }\n function centerDistance(r){\n  return Math.abs(r.left+r.width/2-innerWidth/2)+Math.abs(r.top+r.height/2-innerHeight/2);\n }\n window.__cinejoyFocus=function(dir){\n  var list=elements();\n  if(!list.length){window.scrollBy(0,(dir==='down'?1:dir==='up'?-1:0)*innerHeight*.6);return;}\n  var current=document.activeElement;\n  if(!list.includes(current)){\n   var candidates=list.filter(onscreen);\n   if(!candidates.length)candidates=list;\n   candidates.sort(function(a,b){return centerDistance(rect(a))-centerDistance(rect(b));});\n   focus(candidates[0]);return;\n  }\n  var r=rect(current),cx=r.left+r.width/2,cy=r.top+r.height/2,best=null,score=Infinity;\n  list.forEach(function(el){\n   if(el===current)return;\n   var q=rect(el),dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;\n   var forward=dir==='up'?-dy:dir==='down'?dy:dir==='left'?-dx:dx;\n   var cross=(dir==='up'||dir==='down')?Math.abs(dx):Math.abs(dy);\n   if(forward<8)return;\n   var s=forward+2.4*cross;\n   // Prefer visible elements, but allow scrolling into rows just off-screen.\n   if(!onscreen(el))s+=innerHeight*.15;\n   if(s<score){score=s;best=el;}\n  });\n  if(best)focus(best);\n  else window.scrollBy({top:dir==='down'?innerHeight*.55:dir==='up'?-innerHeight*.55:0,\n    left:dir==='right'?innerWidth*.35:dir==='left'?-innerWidth*.35:0,behavior:'instant'});\n };\n function playerTarget(){\n  var frames=Array.from(document.querySelectorAll('iframe,video')).filter(valid).filter(onscreen);\n  if(!frames.length)frames=Array.from(document.querySelectorAll('[class*=\"player\"],[class*=\"Player\"],[id*=\"player\"]'))\n   .filter(valid).filter(onscreen).filter(function(x){var r=rect(x);return r.width>innerWidth*.3&&r.height>100;});\n  frames.sort(function(a,b){var ra=rect(a),rb=rect(b);return rb.width*rb.height-ra.width*ra.height;});\n  return frames[0]||null;\n }\n function tapCoords(el){\n  if(!el)return null;\n  var r=rect(el);\n  return {x:Math.max(4,Math.min(innerWidth-4,r.left+r.width/2)),\n          y:Math.max(4,Math.min(innerHeight-4,r.top+r.height/2)),\n          vw:innerWidth,vh:innerHeight};\n }\n window.__cinejoyPlayerTap=function(){return tapCoords(playerTarget());};\n window.__cinejoySelect=function(){\n  var el=document.activeElement;\n  if(isPlayer(el))return tapCoords(el);\n  if(el&&el!==document.body&&el!==document.documentElement&&valid(el)){\n   // A true touch click works better for embedded video than a synthetic DOM click.\n   if(el.matches('a,button,input,select,textarea,[role=\"button\"],[onclick],[class*=\"cursor-pointer\"],[data-cj-remote]')){\n    el.click();return null;\n   }\n  }\n  var target=playerTarget();\n  if(target)return tapCoords(target);\n  var candidates=elements().filter(onscreen);\n  if(candidates.length){candidates.sort(function(a,b){return centerDistance(rect(a))-centerDistance(rect(b));});focus(candidates[0]);}\n  return null;\n };\n})();";
+              private static final String NAV_SCRIPT = "(function(){\n if(window.__cinejoyRemote43) return;\n window.__cinejoyRemote43=true;\n var style=document.createElement('style');\n style.textContent='a:focus,button:focus,input:focus,select:focus,textarea:focus,iframe:focus,video:focus,[role=\"button\"]:focus,[tabindex]:focus,[data-cj-remote=\"1\"]:focus{outline:3px solid #7bff60!important;outline-offset:3px!important;box-shadow:0 0 0 2px rgba(0,0,0,.65)!important;}';\n (document.head||document.documentElement).appendChild(style);\n function rect(el){try{return el.getBoundingClientRect();}catch(e){return null;}}\n function valid(el){\n  if(!el||el.disabled)return false;\n  var r=rect(el);if(!r||r.width<13||r.height<12)return false;\n  var s=window.getComputedStyle(el);\n  return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&s.pointerEvents!=='none';\n }\n function onscreen(el){\n  var r=rect(el);\n  return r&&r.right>4&&r.bottom>4&&r.left<innerWidth-4&&r.top<innerHeight-4;\n }\n function isPlayer(el){return el&&/^(IFRAME|VIDEO)$/.test(el.tagName||'');}\n function focus(el){\n  if(!el)return;\n  if(!el.hasAttribute('tabindex')&&(!/^(A|BUTTON|INPUT|SELECT|TEXTAREA|VIDEO|IFRAME)$/.test(el.tagName||''))){\n   el.setAttribute('tabindex','0');el.dataset.cjRemote='1';\n  }\n  try{el.focus({preventScroll:true});}catch(e){el.focus();}\n  try{el.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}\n }\n function elements(){\n  var q='a[href],button,input,select,textarea,[role=\"button\"],[tabindex],[onclick],[class*=\"cursor-pointer\"],[style*=\"cursor: pointer\"],iframe,video';\n  var nodes=Array.from(document.querySelectorAll(q)).slice(0,1100).filter(valid);\n  // Nested clickable wrappers should not steal focus from their clickable children.\n  return nodes.filter(function(el){\n   if(isPlayer(el))return true;\n   if(el.tagName==='DIV'||el.tagName==='SPAN'){\n    var children=el.querySelectorAll('a[href],button,[role=\"button\"]');\n    if(children.length>0&&children.length<6)return false;\n   }\n   return true;\n  });\n }\n function centerDistance(r){\n  return Math.abs(r.left+r.width/2-innerWidth/2)+Math.abs(r.top+r.height/2-innerHeight/2);\n }\n window.__cinejoyFocus=function(dir){\n  var list=elements();\n  if(!list.length){window.scrollBy(0,(dir==='down'?1:dir==='up'?-1:0)*innerHeight*.6);return;}\n  var current=document.activeElement;\n  if(!list.includes(current)){\n   var candidates=list.filter(onscreen);\n   if(!candidates.length)candidates=list;\n   candidates.sort(function(a,b){return centerDistance(rect(a))-centerDistance(rect(b));});\n   focus(candidates[0]);return;\n  }\n  var r=rect(current),cx=r.left+r.width/2,cy=r.top+r.height/2,best=null,score=Infinity;\n  list.forEach(function(el){\n   if(el===current)return;\n   var q=rect(el),dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;\n   var forward=dir==='up'?-dy:dir==='down'?dy:dir==='left'?-dx:dx;\n   var cross=(dir==='up'||dir==='down')?Math.abs(dx):Math.abs(dy);\n   if(forward<8)return;\n   var s=forward+2.4*cross;\n   // Prefer visible elements, but allow scrolling into rows just off-screen.\n   if(!onscreen(el))s+=innerHeight*.15;\n   if(s<score){score=s;best=el;}\n  });\n  if(best)focus(best);\n  else window.scrollBy({top:dir==='down'?innerHeight*.55:dir==='up'?-innerHeight*.55:0,\n    left:dir==='right'?innerWidth*.35:dir==='left'?-innerWidth*.35:0,behavior:'instant'});\n };\n function playerTarget(){\n  var frames=Array.from(document.querySelectorAll('iframe,video')).filter(valid).filter(onscreen);\n  if(!frames.length)frames=Array.from(document.querySelectorAll('[class*=\"player\"],[class*=\"Player\"],[id*=\"player\"]'))\n   .filter(valid).filter(onscreen).filter(function(x){var r=rect(x);return r.width>innerWidth*.3&&r.height>100;});\n  frames.sort(function(a,b){var ra=rect(a),rb=rect(b);return rb.width*rb.height-ra.width*ra.height;});\n  return frames[0]||null;\n }\n function tapCoords(el){\n  if(!el)return null;\n  var r=rect(el);\n  return {x:Math.max(4,Math.min(innerWidth-4,r.left+r.width/2)),\n          y:Math.max(4,Math.min(innerHeight-4,r.top+r.height/2)),\n          vw:innerWidth,vh:innerHeight};\n }\n window.__cinejoyPlayerTap=function(){return tapCoords(playerTarget());};\n window.__cinejoySelect=function(){\n  var el=document.activeElement;\n  if(isPlayer(el))return tapCoords(el);\n  if(el&&el!==document.body&&el!==document.documentElement&&valid(el)){\n   // A true touch click works better for embedded video than a synthetic DOM click.\n   if(el.matches('a,button,input,select,textarea,[role=\"button\"],[onclick],[class*=\"cursor-pointer\"],[data-cj-remote]')){\n    el.click();return null;\n   }\n  }\n  var target=playerTarget();\n  if(target)return tapCoords(target);\n  var candidates=elements().filter(onscreen);\n  if(candidates.length){candidates.sort(function(a,b){return centerDistance(rect(a))-centerDistance(rect(b));});focus(candidates[0]);}\n  return null;\n };\n\n // Android TV playback mode: WebView cannot inspect cross-origin iframe controls.\n // Return coordinates to Android; it sends a real tap to the embedded surface.\n function playerSurface(){\n   var nodes=Array.from(document.querySelectorAll('iframe,video,.jwplayer,.plyr,.video-js,[id*=\"player\"],[class*=\"video-player\"],[class*=\"videoPlayer\"]'));\n   nodes=nodes.filter(function(el){\n      if(!valid(el))return false;\n      var r=rect(el);\n      return r.width>innerWidth*.45&&r.height>innerHeight*.35&&r.top<innerHeight&&r.bottom>0;\n   });\n   // Prefer real media or iframe to avoid selecting the surrounding page.\n   nodes.sort(function(a,b){\n     var pa=isPlayer(a)?0:1,pb=isPlayer(b)?0:1;\n     if(pa!==pb)return pa-pb;\n     var ra=rect(a),rb=rect(b);\n     return (rb.width*rb.height)-(ra.width*ra.height);\n   });\n   return nodes[0]||null;\n }\n function playerTouch(surface,xRatio,yRatio){\n   var r=rect(surface);if(!r)return null;\n   return {x:Math.max(4,Math.min(innerWidth-4,r.left+r.width*xRatio)),\n     y:Math.max(4,Math.min(innerHeight-4,r.top+r.height*yRatio)),\n     vw:innerWidth,vh:innerHeight};\n }\n function controlButton(surface,action){\n   var root=surface.tagName==='IFRAME'?document:surface;\n   var selectors={\n     toggle:'[aria-label*=\"Play\" i],[aria-label*=\"Pause\" i],[title*=\"Play\" i],[title*=\"Pause\" i]',\n     back:'[aria-label*=\"Backward\" i],[title*=\"Backward\" i],[aria-label*=\"Rewind\" i]',\n     forward:'[aria-label*=\"Forward\" i],[title*=\"Forward\" i]',\n     fullscreen:'[aria-label*=\"Full\" i],[title*=\"Full\" i]'\n   };\n   var buttons=Array.from(root.querySelectorAll(selectors[action]||\"\")).filter(valid).filter(onscreen);\n   if(!buttons.length)return null;\n   var frame=rect(surface);\n   var inside=buttons.filter(function(el){\n     var r=rect(el),x=r.left+r.width/2,y=r.top+r.height/2;\n     return x>=frame.left&&x<=frame.right&&y>=frame.top&&y<=frame.bottom;\n   });\n   return (inside.length?inside:buttons)[0];\n }\n window.__cinejoyPlayerCommand=function(command){\n   var surface=playerSurface();\n   if(!surface)return null;\n   var v=surface.tagName==='VIDEO'?surface:surface.querySelector('video');\n   if(v){\n      try{\n        if(command==='toggle'){\n          if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}\n          else v.pause();\n          return null;\n        }\n        if(command==='back'||command==='forward'){\n           v.currentTime=Math.max(0,(v.currentTime||0)+(command==='back'?-10:10));\n           return null;\n        }\n        if(command==='fullscreen'){\n           if(v.requestFullscreen)v.requestFullscreen();\n           return null;\n        }\n      }catch(e){}\n   }\n   // Native on-screen touch, usable when the video is a cross-origin iframe.\n   var btn=controlButton(surface,command);\n   if(btn){\n     var q=rect(btn),r=rect(surface);\n     return playerTouch(surface,(q.left+q.width/2-r.left)/r.width,(q.top+q.height/2-r.top)/r.height);\n   }\n   // Conservative fallback coordinates for TV players with bottom control strips.\n   var xs={toggle:.075,back:.145,forward:.195,fullscreen:.96};\n   return playerTouch(surface,xs[command]===undefined?.075:xs[command],.935);\n };\n var originalSelect=window.__cinejoySelect;\n window.__cinejoySelect=function(){\n   var surface=playerSurface(),active=document.activeElement;\n   if(surface && (!active||active===document.body||active===document.documentElement||active===surface)){\n     return window.__cinejoyPlayerCommand('toggle');\n   }\n   return originalSelect();\n };\n window.__cinejoyTvPlayerActive=function(){return !!playerSurface();};\n\n})();";
               private static final String[] BLOCKED_HOSTS = {
                   "doubleclick.net", "googlesyndication.com", "googleadservices.com",
                   "adservice.google.com", "adnxs.com", "adsrvr.org", "taboola.com",
@@ -329,8 +329,12 @@ jobs:
                   }
               }
               private void tapVisiblePlayer() {
+                  playerCommand("toggle");
+              }
+              private void playerCommand(String action) {
                   if (web == null) return;
-                  web.evaluateJavascript("window.__cinejoyPlayerTap&&window.__cinejoyPlayerTap();", this::handleRemoteTap);
+                  web.evaluateJavascript("window.__cinejoyPlayerCommand&&window.__cinejoyPlayerCommand('" + action + "');",
+                      this::handleRemoteTap);
               }
               @Override public boolean dispatchKeyEvent(KeyEvent e) {
                   int key = e.getKeyCode();
@@ -346,6 +350,16 @@ jobs:
                           backMenuHandled = false;
                           return true;
                       }
+                  }
+                  if (key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
+                      key == KeyEvent.KEYCODE_MEDIA_PLAY || key == KeyEvent.KEYCODE_MEDIA_PAUSE ||
+                      key == KeyEvent.KEYCODE_MEDIA_REWIND ||
+                      key == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
+                      if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                          playerCommand(key == KeyEvent.KEYCODE_MEDIA_REWIND ? "back" :
+                              key == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ? "forward" : "toggle");
+                      }
+                      return true;
                   }
                   if (key == KeyEvent.KEYCODE_MENU || key == KeyEvent.KEYCODE_SETTINGS) {
                       if (e.getAction() == KeyEvent.ACTION_UP) menu();
@@ -429,7 +443,7 @@ jobs:
                   final String ads = adBlockEnabled ? "Ad filter: ON" : "Ad filter: OFF";
                   final String cookies = compatibilityCookies ? "Player cookies: ON" : "Player cookies: OFF";
                   new AlertDialog.Builder(this)
-                      .setTitle("Cinejoy TV V4.3  •  Quick Settings")
+                      .setTitle("Cinejoy TV V4.4  •  Quick Settings")
                       .setItems(new String[]{
                           "Home",
                           "Reload this movie",
@@ -437,7 +451,10 @@ jobs:
                           ads,
                           cookies,
                           "Open this movie in TV browser",
-                          "Tap video player (remote OK fallback)",
+                          "Play / Pause (TV player)",
+                          "Rewind 10s (TV player)",
+                          "Forward 10s (TV player)",
+                          "Fullscreen (TV player)",
                           pointer,
                           "Exit"
                       },(d,n) -> {
@@ -465,13 +482,16 @@ jobs:
                                   web.reload();
                                   break;
                               case 5: openCurrentInBrowser(); break;
-                              case 6: tapVisiblePlayer(); break;
-                              case 7:
+                              case 6: playerCommand("toggle"); break;
+                              case 7: playerCommand("back"); break;
+                              case 8: playerCommand("forward"); break;
+                              case 9: playerCommand("fullscreen"); break;
+                              case 10:
                                   pointerMode = !pointerMode;
                                   cursor.setVisibility(pointerMode ? View.VISIBLE : View.GONE);
                                   web.requestFocus();
                                   break;
-                              case 8: finish(); break;
+                              case 11: finish(); break;
                           }
                       }).show();
               }
@@ -526,6 +546,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cinejoy-TV-V4.3-Cross-TV-Test-APK
+          name: Cinejoy-TV-V4.4-Player-Remote-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
