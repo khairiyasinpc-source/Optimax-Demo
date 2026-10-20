@@ -1,4 +1,4 @@
-name: Build Cinejoy TV V4.2 Playback Test
+name: Build Cinejoy TV V4.3 Cross-TV Remote Fix
 on:
   push:
     branches:
@@ -47,8 +47,8 @@ jobs:
               applicationId 'com.personal.tvweblauncher'
               minSdk 23
               targetSdk 32
-              versionCode 6
-              versionName '4.2'
+              versionCode 7
+              versionName '4.3'
             }
             compileOptions {
               sourceCompatibility JavaVersion.VERSION_17
@@ -62,6 +62,7 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-feature android:name="android.software.leanback" android:required="false"/>
               <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+              <uses-feature android:name="android.hardware.type.television" android:required="false"/>
               <application android:label="Cinejoy TV" android:icon="@drawable/app_icon"
                 android:allowBackup="false" android:usesCleartextTraffic="false" android:hardwareAccelerated="true"
                 android:theme="@android:style/Theme.Material.NoActionBar">
@@ -94,6 +95,7 @@ jobs:
           import android.os.Build;
           import android.os.Bundle;
           import android.os.SystemClock;
+          import org.json.JSONObject;
           import android.view.KeyEvent;
           import android.view.MotionEvent;
           import android.view.View;
@@ -114,7 +116,7 @@ jobs:
           
           public final class MainActivity extends Activity {
               private static final String URL = "https://cinejoy.pk/";
-              private static final String NAV_SCRIPT = "(function(){\n if(window.__cinejoyTvReady) return;\n window.__cinejoyTvReady=true;\n // TV focus stays visible, without an on-screen mouse cursor.\n var sheet=document.createElement('style');\n sheet.textContent='a:focus,button:focus,input:focus,select:focus,textarea:focus,[role=\"button\"]:focus,[tabindex]:focus{outline:3px solid #55c9ff!important;outline-offset:3px!important;box-shadow:0 0 0 3px rgba(0,0,0,.55)!important;}';\n (document.head||document.documentElement).appendChild(sheet);\n function visible(el){\n   if(!el||!el.getBoundingClientRect) return false;\n   var r=el.getBoundingClientRect(),s=window.getComputedStyle(el);\n   return r.width>8&&r.height>8&&s.visibility!=='hidden'&&s.display!=='none'&&Number(s.opacity)!==0&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth;\n }\n function elems(){\n   return Array.from(document.querySelectorAll('a[href],button,input,select,textarea,[role=\"button\"],[tabindex],[onclick],video'))\n     .filter(visible).slice(0,500);\n }\n window.__cinejoyFocus=function(d){\n   var list=elems(),prev=document.activeElement,current=visible(prev)?prev:null;\n   if(!list.length){ window.scrollBy({top:d==='down'?innerHeight*.6:d==='up'?-innerHeight*.6:0,left:0});return; }\n   if(!current||!list.includes(current)){\n     var best=list.sort((a,b)=>{\n       var ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect();\n       var da=Math.abs(ra.left+ra.width/2-innerWidth/2)+Math.abs(ra.top+ra.height/2-innerHeight/2);\n       var db=Math.abs(rb.left+rb.width/2-innerWidth/2)+Math.abs(rb.top+rb.height/2-innerHeight/2);\n       return da-db;\n     })[0];\n     if(best){if(best.matches('[onclick],[role=\"button\"]')&&!best.hasAttribute('tabindex'))best.tabIndex=0;best.focus({preventScroll:true});best.scrollIntoView({block:'nearest',inline:'nearest'});}\n     return;\n   }\n   var r=current.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,best=null,bestScore=Infinity;\n   list.forEach(function(el){\n      if(el===current) return;\n      var q=el.getBoundingClientRect(),dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;\n      var forward=d==='up'?-dy:d==='down'?dy:d==='left'?-dx:dx;\n      var cross=(d==='up'||d==='down')?Math.abs(dx):Math.abs(dy);\n      if(forward<6)return;\n      var score=forward+cross*2.5;\n      if(score<bestScore){bestScore=score;best=el;}\n   });\n   if(best){if(best.matches('[onclick],[role=\"button\"]')&&!best.hasAttribute('tabindex'))best.tabIndex=0;best.focus({preventScroll:true});best.scrollIntoView({block:'nearest',inline:'nearest'});}\n   else {window.scrollBy({top:d==='down'?innerHeight*.55:d==='up'?-innerHeight*.55:0,left:d==='right'?innerWidth*.45:d==='left'?-innerWidth*.45:0});}\n };\n window.__cinejoySelect=function(){\n    var el=document.activeElement;\n    if(el&&el!==document.body&&el!==document.documentElement){el.click();return true;}\n    return false;\n };\n\n // Align Cinejoy's icon dock to the exact viewport centre. Keep its original styling.\n function alignTvDock(){\n  var candidates=[],seen=new Set(),vw=window.innerWidth;\n  if(vw<250)return;\n  var selectors='nav,[role=\"navigation\"],[class*=\"dock\"],[class*=\"Dock\"],[class*=\"bottom-nav\"],[class*=\"BottomNav\"],[class*=\"floating-nav\"],[class*=\"FloatingNav\"]';\n  function consider(el){\n    if(!el||seen.has(el)||el===document.body||el===document.documentElement)return;\n    seen.add(el);\n    var r=el.getBoundingClientRect();\n    if(r.height<38||r.height>180||r.width<vw*.39||r.width>vw*.97)return;\n    if(r.bottom<0||r.top>innerHeight)return;\n    var links=el.querySelectorAll('a,button,[role=\"button\"]');\n    if(links.length<5||links.length>8)return;\n    var icons=el.querySelectorAll('svg,img').length;\n    if(icons<4)return;\n    var st=window.getComputedStyle(el),rad=parseFloat(st.borderTopLeftRadius)||0;\n    var bg=st.backgroundColor;\n    var score=Math.abs(links.length-6)*20+(rad<18?20:0)\n       +(bg==='rgba(0, 0, 0, 0)'||bg==='transparent'?8:0)\n       +Math.abs(vw*.85-r.width)/vw*12;\n    candidates.push({el:el,score:score,rect:r,position:st.position});\n  }\n  document.querySelectorAll(selectors).forEach(consider);\n  if(!candidates.length){\n    var buttons=document.querySelectorAll('a,button,[role=\"button\"]');\n    for(var i=0;i<Math.min(buttons.length,180);i++){\n      if(!visible(buttons[i]))continue;\n      var p=buttons[i].parentElement;\n      for(var depth=0;p&&depth<4&&p!==document.body;depth++,p=p.parentElement)consider(p);\n    }\n  }\n  if(!candidates.length)return;\n  candidates.sort(function(a,b){return a.score-b.score;});\n  var best=candidates[0],n=best.el,r=best.rect;\n  if(n.dataset.cjCenteredDock==='1')return;\n  n.dataset.cjCenteredDock='1';\n  // Preserve vertical placement, width, colour, icons and shadow.\n  // A viewport-anchored dock stays centred across Xiaomi TV resolutions.\n  n.style.setProperty('position','fixed','important');\n  n.style.setProperty('left','50%','important');\n  n.style.setProperty('right','auto','important');\n  n.style.setProperty('top',Math.max(0,r.top)+'px','important');\n  n.style.setProperty('bottom','auto','important');\n  n.style.setProperty('margin-left','0px','important');\n  n.style.setProperty('margin-right','0px','important');\n  n.style.setProperty('transform','translateX(-50%)','important');\n  n.style.setProperty('max-width','calc(100vw - 24px)','important');\n  n.style.setProperty('box-sizing','border-box','important');\n }\n setTimeout(alignTvDock,150);\n setTimeout(alignTvDock,700);\n setTimeout(alignTvDock,1800);\n setTimeout(alignTvDock,4000);\n window.addEventListener('resize',function(){\n   var el=document.querySelector('[data-cj-centered-dock=\"1\"]');\n   if(el)el.style.setProperty('max-width','calc(100vw - 24px)','important');\n });\n // The site renders navigation asynchronously on some pages.\n var observerPending=false;\n var dockObserver=new MutationObserver(function(){\n    if(observerPending)return;\n    observerPending=true;\n    setTimeout(function(){observerPending=false;alignTvDock();},600);\n });\n dockObserver.observe(document.documentElement,{childList:true,subtree:true});\n})();";
+              private static final String NAV_SCRIPT = "(function(){\n if(window.__cinejoyRemote43) return;\n window.__cinejoyRemote43=true;\n var style=document.createElement('style');\n style.textContent='a:focus,button:focus,input:focus,select:focus,textarea:focus,iframe:focus,video:focus,[role=\"button\"]:focus,[tabindex]:focus,[data-cj-remote=\"1\"]:focus{outline:3px solid #7bff60!important;outline-offset:3px!important;box-shadow:0 0 0 2px rgba(0,0,0,.65)!important;}';\n (document.head||document.documentElement).appendChild(style);\n function rect(el){try{return el.getBoundingClientRect();}catch(e){return null;}}\n function valid(el){\n  if(!el||el.disabled)return false;\n  var r=rect(el);if(!r||r.width<13||r.height<12)return false;\n  var s=window.getComputedStyle(el);\n  return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&s.pointerEvents!=='none';\n }\n function onscreen(el){\n  var r=rect(el);\n  return r&&r.right>4&&r.bottom>4&&r.left<innerWidth-4&&r.top<innerHeight-4;\n }\n function isPlayer(el){return el&&/^(IFRAME|VIDEO)$/.test(el.tagName||'');}\n function focus(el){\n  if(!el)return;\n  if(!el.hasAttribute('tabindex')&&(!/^(A|BUTTON|INPUT|SELECT|TEXTAREA|VIDEO|IFRAME)$/.test(el.tagName||''))){\n   el.setAttribute('tabindex','0');el.dataset.cjRemote='1';\n  }\n  try{el.focus({preventScroll:true});}catch(e){el.focus();}\n  try{el.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}\n }\n function elements(){\n  var q='a[href],button,input,select,textarea,[role=\"button\"],[tabindex],[onclick],[class*=\"cursor-pointer\"],[style*=\"cursor: pointer\"],iframe,video';\n  var nodes=Array.from(document.querySelectorAll(q)).slice(0,1100).filter(valid);\n  // Nested clickable wrappers should not steal focus from their clickable children.\n  return nodes.filter(function(el){\n   if(isPlayer(el))return true;\n   if(el.tagName==='DIV'||el.tagName==='SPAN'){\n    var children=el.querySelectorAll('a[href],button,[role=\"button\"]');\n    if(children.length>0&&children.length<6)return false;\n   }\n   return true;\n  });\n }\n function centerDistance(r){\n  return Math.abs(r.left+r.width/2-innerWidth/2)+Math.abs(r.top+r.height/2-innerHeight/2);\n }\n window.__cinejoyFocus=function(dir){\n  var list=elements();\n  if(!list.length){window.scrollBy(0,(dir==='down'?1:dir==='up'?-1:0)*innerHeight*.6);return;}\n  var current=document.activeElement;\n  if(!list.includes(current)){\n   var candidates=list.filter(onscreen);\n   if(!candidates.length)candidates=list;\n   candidates.sort(function(a,b){return centerDistance(rect(a))-centerDistance(rect(b));});\n   focus(candidates[0]);return;\n  }\n  var r=rect(current),cx=r.left+r.width/2,cy=r.top+r.height/2,best=null,score=Infinity;\n  list.forEach(function(el){\n   if(el===current)return;\n   var q=rect(el),dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;\n   var forward=dir==='up'?-dy:dir==='down'?dy:dir==='left'?-dx:dx;\n   var cross=(dir==='up'||dir==='down')?Math.abs(dx):Math.abs(dy);\n   if(forward<8)return;\n   var s=forward+2.4*cross;\n   // Prefer visible elements, but allow scrolling into rows just off-screen.\n   if(!onscreen(el))s+=innerHeight*.15;\n   if(s<score){score=s;best=el;}\n  });\n  if(best)focus(best);\n  else window.scrollBy({top:dir==='down'?innerHeight*.55:dir==='up'?-innerHeight*.55:0,\n    left:dir==='right'?innerWidth*.35:dir==='left'?-innerWidth*.35:0,behavior:'instant'});\n };\n function playerTarget(){\n  var frames=Array.from(document.querySelectorAll('iframe,video')).filter(valid).filter(onscreen);\n  if(!frames.length)frames=Array.from(document.querySelectorAll('[class*=\"player\"],[class*=\"Player\"],[id*=\"player\"]'))\n   .filter(valid).filter(onscreen).filter(function(x){var r=rect(x);return r.width>innerWidth*.3&&r.height>100;});\n  frames.sort(function(a,b){var ra=rect(a),rb=rect(b);return rb.width*rb.height-ra.width*ra.height;});\n  return frames[0]||null;\n }\n function tapCoords(el){\n  if(!el)return null;\n  var r=rect(el);\n  return {x:Math.max(4,Math.min(innerWidth-4,r.left+r.width/2)),\n          y:Math.max(4,Math.min(innerHeight-4,r.top+r.height/2)),\n          vw:innerWidth,vh:innerHeight};\n }\n window.__cinejoyPlayerTap=function(){return tapCoords(playerTarget());};\n window.__cinejoySelect=function(){\n  var el=document.activeElement;\n  if(isPlayer(el))return tapCoords(el);\n  if(el&&el!==document.body&&el!==document.documentElement&&valid(el)){\n   // A true touch click works better for embedded video than a synthetic DOM click.\n   if(el.matches('a,button,input,select,textarea,[role=\"button\"],[onclick],[class*=\"cursor-pointer\"],[data-cj-remote]')){\n    el.click();return null;\n   }\n  }\n  var target=playerTarget();\n  if(target)return tapCoords(target);\n  var candidates=elements().filter(onscreen);\n  if(candidates.length){candidates.sort(function(a,b){return centerDistance(rect(a))-centerDistance(rect(b));});focus(candidates[0]);}\n  return null;\n };\n})();";
               private static final String[] BLOCKED_HOSTS = {
                   "doubleclick.net", "googlesyndication.com", "googleadservices.com",
                   "adservice.google.com", "adnxs.com", "adsrvr.org", "taboola.com",
@@ -133,6 +135,7 @@ jobs:
               private volatile boolean adBlockEnabled = true;
               private boolean compatibilityCookies = true;
               private boolean backMenuHandled = false;
+              private long lastDpadAt = 0;
           
               @Override public void onCreate(Bundle state) {
                   super.onCreate(state);
@@ -302,8 +305,32 @@ jobs:
                   up.recycle();
               }
               private void nav(String direction) {
-                  if (video != null) return;
+                  if (video != null || web == null) return;
                   web.evaluateJavascript("window.__cinejoyFocus&&window.__cinejoyFocus('" + direction + "');", null);
+              }
+              private void handleRemoteTap(String json) {
+                  if (web == null || json == null || json.equals("null")) return;
+                  try {
+                      JSONObject o = new JSONObject(json);
+                      float vw = (float)o.getDouble("vw");
+                      float vh = (float)o.getDouble("vh");
+                      if (vw <= 0 || vh <= 0) return;
+                      float tx = (float)o.getDouble("x") * web.getWidth() / vw;
+                      float ty = (float)o.getDouble("y") * web.getHeight() / vh;
+                      long now = SystemClock.uptimeMillis();
+                      MotionEvent down = MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,tx,ty,0);
+                      MotionEvent up = MotionEvent.obtain(now,now+70,MotionEvent.ACTION_UP,tx,ty,0);
+                      web.dispatchTouchEvent(down);
+                      web.dispatchTouchEvent(up);
+                      down.recycle();
+                      up.recycle();
+                  } catch (Exception ignored) {
+                      // JavaScript returned null for a normal clickable button.
+                  }
+              }
+              private void tapVisiblePlayer() {
+                  if (web == null) return;
+                  web.evaluateJavascript("window.__cinejoyPlayerTap&&window.__cinejoyPlayerTap();", this::handleRemoteTap);
               }
               @Override public boolean dispatchKeyEvent(KeyEvent e) {
                   int key = e.getKeyCode();
@@ -340,19 +367,33 @@ jobs:
                       } else if (e.getAction() == KeyEvent.ACTION_UP) {
                           if (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT ||
                               key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN ||
-                              key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER)
+                              key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER ||
+                              key == KeyEvent.KEYCODE_NUMPAD_ENTER || key == KeyEvent.KEYCODE_BUTTON_A)
                               return true;
                       }
                   } else if (video == null) {
-                      if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                      if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                          boolean throttle = e.getRepeatCount() > 0 &&
+                              SystemClock.uptimeMillis() - lastDpadAt < 100;
                           switch (key) {
-                              case KeyEvent.KEYCODE_DPAD_LEFT: nav("left"); return true;
-                              case KeyEvent.KEYCODE_DPAD_RIGHT: nav("right"); return true;
-                              case KeyEvent.KEYCODE_DPAD_UP: nav("up"); return true;
-                              case KeyEvent.KEYCODE_DPAD_DOWN: nav("down"); return true;
+                              case KeyEvent.KEYCODE_DPAD_LEFT:
+                              case KeyEvent.KEYCODE_DPAD_RIGHT:
+                              case KeyEvent.KEYCODE_DPAD_UP:
+                              case KeyEvent.KEYCODE_DPAD_DOWN:
+                                  if (!throttle) {
+                                      lastDpadAt = SystemClock.uptimeMillis();
+                                      nav(key == KeyEvent.KEYCODE_DPAD_LEFT ? "left" :
+                                          key == KeyEvent.KEYCODE_DPAD_RIGHT ? "right" :
+                                          key == KeyEvent.KEYCODE_DPAD_UP ? "up" : "down");
+                                  }
+                                  return true;
                               case KeyEvent.KEYCODE_DPAD_CENTER:
                               case KeyEvent.KEYCODE_ENTER:
-                                  web.evaluateJavascript("window.__cinejoySelect&&window.__cinejoySelect();",null);
+                              case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                              case KeyEvent.KEYCODE_BUTTON_A:
+                                  if (e.getRepeatCount() == 0 && web != null)
+                                      web.evaluateJavascript("window.__cinejoySelect&&window.__cinejoySelect();",
+                                          this::handleRemoteTap);
                                   return true;
                           }
                       }
@@ -388,7 +429,7 @@ jobs:
                   final String ads = adBlockEnabled ? "Ad filter: ON" : "Ad filter: OFF";
                   final String cookies = compatibilityCookies ? "Player cookies: ON" : "Player cookies: OFF";
                   new AlertDialog.Builder(this)
-                      .setTitle("Cinejoy TV V4.2  •  Quick Settings")
+                      .setTitle("Cinejoy TV V4.3  •  Quick Settings")
                       .setItems(new String[]{
                           "Home",
                           "Reload this movie",
@@ -396,6 +437,7 @@ jobs:
                           ads,
                           cookies,
                           "Open this movie in TV browser",
+                          "Tap video player (remote OK fallback)",
                           pointer,
                           "Exit"
                       },(d,n) -> {
@@ -423,12 +465,13 @@ jobs:
                                   web.reload();
                                   break;
                               case 5: openCurrentInBrowser(); break;
-                              case 6:
+                              case 6: tapVisiblePlayer(); break;
+                              case 7:
                                   pointerMode = !pointerMode;
                                   cursor.setVisibility(pointerMode ? View.VISIBLE : View.GONE);
                                   web.requestFocus();
                                   break;
-                              case 7: finish(); break;
+                              case 8: finish(); break;
                           }
                       }).show();
               }
@@ -483,6 +526,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cinejoy-TV-V4.2-Playback-Test-APK
+          name: Cinejoy-TV-V4.3-Cross-TV-Test-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
