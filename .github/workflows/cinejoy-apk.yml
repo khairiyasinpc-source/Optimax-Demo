@@ -1,4 +1,4 @@
-name: Build Cinejoy TV APK
+name: Build Cinejoy TV APK V2
 on:
   push:
     branches:
@@ -89,6 +89,7 @@ jobs:
           import android.graphics.Color;
           import android.graphics.Paint;
           import android.net.Uri;
+          import android.net.http.SslError;
           import android.os.Build;
           import android.os.Bundle;
           import android.os.SystemClock;
@@ -99,25 +100,35 @@ jobs:
           import android.view.WindowManager;
           import android.webkit.CookieManager;
           import android.webkit.SslErrorHandler;
-          import android.net.http.SslError;
           import android.webkit.WebChromeClient;
           import android.webkit.WebResourceRequest;
+          import android.webkit.WebResourceResponse;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
           import android.widget.FrameLayout;
           import android.widget.Toast;
+          import java.io.ByteArrayInputStream;
           import java.util.Locale;
           
           public final class MainActivity extends Activity {
               private static final String URL = "https://cinejoy.pk/";
+              private static final String NAV_SCRIPT = "(function(){\n if(window.__cinejoyTvReady) return;\n window.__cinejoyTvReady=true;\n var sheet=document.createElement('style');\n sheet.textContent='a:focus,button:focus,input:focus,select:focus,textarea:focus,[role=\"button\"]:focus,[tabindex]:focus{outline:3px solid #55c9ff!important;outline-offset:3px!important;box-shadow:0 0 0 3px rgba(0,0,0,.55)!important;}';\n (document.head||document.documentElement).appendChild(sheet);\n function visible(el){\n   if(!el||!el.getBoundingClientRect) return false;\n   var r=el.getBoundingClientRect(),s=window.getComputedStyle(el);\n   return r.width>8&&r.height>8&&s.visibility!=='hidden'&&s.display!=='none'&&Number(s.opacity)!==0&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth;\n }\n function elems(){\n   return Array.from(document.querySelectorAll('a[href],button,input,select,textarea,[role=\"button\"],[tabindex],video'))\n     .filter(visible).slice(0,500);\n }\n window.__cinejoyFocus=function(d){\n   var list=elems(),prev=document.activeElement,current=visible(prev)?prev:null;\n   if(!list.length){ window.scrollBy({top:d==='down'?innerHeight*.6:d==='up'?-innerHeight*.6:0,left:0});return; }\n   if(!current||!list.includes(current)){\n     var best=list.sort((a,b)=>{\n       var ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect();\n       var da=Math.abs(ra.left+ra.width/2-innerWidth/2)+Math.abs(ra.top+ra.height/2-innerHeight/2);\n       var db=Math.abs(rb.left+rb.width/2-innerWidth/2)+Math.abs(rb.top+rb.height/2-innerHeight/2);\n       return da-db;\n     })[0];\n     if(best){best.focus({preventScroll:true});best.scrollIntoView({block:'nearest',inline:'nearest'});}\n     return;\n   }\n   var r=current.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,best=null,bestScore=Infinity;\n   list.forEach(function(el){\n      if(el===current) return;\n      var q=el.getBoundingClientRect(),dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;\n      var forward=d==='up'?-dy:d==='down'?dy:d==='left'?-dx:dx;\n      var cross=(d==='up'||d==='down')?Math.abs(dx):Math.abs(dy);\n      if(forward<6)return;\n      var score=forward+cross*2.5;\n      if(score<bestScore){bestScore=score;best=el;}\n   });\n   if(best){best.focus({preventScroll:true});best.scrollIntoView({block:'nearest',inline:'nearest'});}\n   else {window.scrollBy({top:d==='down'?innerHeight*.55:d==='up'?-innerHeight*.55:0,left:d==='right'?innerWidth*.45:d==='left'?-innerWidth*.45:0});}\n };\n window.__cinejoySelect=function(){\n    var el=document.activeElement;\n    if(el&&el!==document.body&&el!==document.documentElement){el.click();return true;}\n    return false;\n };\n})();";
+              private static final String[] BLOCKED_HOSTS = {
+                  "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+                  "adservice.google.com", "adnxs.com", "adsrvr.org", "taboola.com",
+                  "outbrain.com", "popads.net", "popcash.net", "exoclick.com",
+                  "juicyads.com", "propellerads.com", "adsterra.com",
+                  "onclickalgo.com", "onclkds.com", "mgid.com",
+                  "ad-maven.com", "trafficjunky.net", "hilltopads.net"
+              };
               private FrameLayout root;
               private WebView web;
-              private View fullscreen;
-              private WebChromeClient.CustomViewCallback fullscreenCallback;
+              private View video;
+              private WebChromeClient.CustomViewCallback videoCallback;
               private Cursor cursor;
               private float x = -1, y = -1;
-              private boolean cursorMode = true;
+              private boolean pointerMode = false;
           
               @Override public void onCreate(Bundle state) {
                   super.onCreate(state);
@@ -127,14 +138,18 @@ jobs:
                   root.setBackgroundColor(Color.rgb(7,10,18));
                   web = new WebView(this);
                   web.setBackgroundColor(Color.rgb(7,10,18));
-                  root.addView(web, new FrameLayout.LayoutParams(-1,-1));
+                  web.setFocusable(true);
+                  web.setFocusableInTouchMode(true);
+                  root.addView(web, new FrameLayout.LayoutParams(-1, -1));
                   cursor = new Cursor();
-                  root.addView(cursor, new FrameLayout.LayoutParams(-1,-1));
+                  cursor.setVisibility(View.GONE);
+                  root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
                   setContentView(root);
+          
                   WebSettings s = web.getSettings();
                   s.setJavaScriptEnabled(true);
                   s.setDomStorageEnabled(true);
-                  s.setMediaPlaybackRequiresUserGesture(true);
+                  s.setMediaPlaybackRequiresUserGesture(false);
                   s.setJavaScriptCanOpenWindowsAutomatically(false);
                   s.setSupportMultipleWindows(true);
                   s.setAllowFileAccess(false);
@@ -143,28 +158,45 @@ jobs:
                   s.setUseWideViewPort(true);
                   s.setLoadWithOverviewMode(true);
                   s.setBuiltInZoomControls(false);
+                  s.setCacheMode(WebSettings.LOAD_DEFAULT);
                   if (Build.VERSION.SDK_INT >= 26) s.setSafeBrowsingEnabled(true);
                   CookieManager.getInstance().setAcceptCookie(true);
-                  CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
+                  CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+          
                   web.setWebViewClient(new WebViewClient() {
                       @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
                           return req.isForMainFrame() && !allowed(req.getUrl());
                       }
-                      @Override public boolean shouldOverrideUrlLoading(WebView v,String url) {
-                          return !allowed(Uri.parse(url));
+                      @Override public boolean shouldOverrideUrlLoading(WebView v, String u) {
+                          return !allowed(Uri.parse(u));
+                      }
+                      @Override public void onPageFinished(WebView v, String u) {
+                          if (allowed(Uri.parse(u))) v.evaluateJavascript(NAV_SCRIPT, null);
+                      }
+                      @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                          Uri u = req.getUrl();
+                          if (u != null && isBlocked(u.getHost())) {
+                              return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                          }
+                          return null;
                       }
                       @Override public void onReceivedSslError(WebView v, SslErrorHandler h, SslError e) {
                           h.cancel();
-                          Toast.makeText(MainActivity.this,"HTTPS security error",Toast.LENGTH_LONG).show();
+                          Toast.makeText(MainActivity.this, "HTTPS security error", Toast.LENGTH_LONG).show();
                       }
                   });
                   web.setWebChromeClient(new WebChromeClient() {
-                      @Override public void onShowCustomView(View v,CustomViewCallback cb) {
-                          if (fullscreen != null) { cb.onCustomViewHidden(); return; }
-                          fullscreen = v;
-                          fullscreenCallback = cb;
+                      @Override public boolean onCreateWindow(WebView v, boolean dialog,
+                          boolean userGesture, android.os.Message resultMsg) {
+                          // Reject extra popup windows and advertising tabs.
+                          return false;
+                      }
+                      @Override public void onShowCustomView(View v, CustomViewCallback cb) {
+                          if (video != null) { cb.onCustomViewHidden(); return; }
+                          video = v;
+                          videoCallback = cb;
                           web.setVisibility(View.INVISIBLE);
-                          root.addView(v,new FrameLayout.LayoutParams(-1,-1));
+                          root.addView(v, new FrameLayout.LayoutParams(-1,-1));
                           root.bringChildToFront(cursor);
                           immersive();
                       }
@@ -175,19 +207,27 @@ jobs:
                       y = root.getHeight()/2f;
                       cursor.invalidate();
                   });
+                  web.requestFocus();
                   web.loadUrl(URL);
               }
           
-              private boolean allowed(Uri u) {
+              private static boolean isBlocked(String host) {
+                  if (host == null) return false;
+                  String h = host.toLowerCase(Locale.ROOT);
+                  for (String domain : BLOCKED_HOSTS)
+                      if (h.equals(domain) || h.endsWith("." + domain)) return true;
+                  return false;
+              }
+              private static boolean allowed(Uri u) {
                   if (u == null || !"https".equalsIgnoreCase(u.getScheme()) || u.getHost() == null) return false;
                   String h = u.getHost().toLowerCase(Locale.ROOT);
                   return h.equals("cinejoy.pk") || h.endsWith(".cinejoy.pk");
               }
               private void immersive() {
                   getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+                      View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                      View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
               }
               @Override public void onWindowFocusChanged(boolean focus) {
                   super.onWindowFocusChanged(focus);
@@ -195,99 +235,130 @@ jobs:
               }
               private float dp(float n) { return n * getResources().getDisplayMetrics().density; }
               private void move(float dx, float dy) {
-                  int w=root.getWidth(),h=root.getHeight();
-                  if(w<1||h<1)return;
-                  if(x<0)x=w/2f;
-                  if(y<0)y=h/2f;
-                  x=Math.min(w-8,Math.max(8,x+dx));
-                  y=Math.min(h-8,Math.max(8,y+dy));
+                  int w = root.getWidth(), h = root.getHeight();
+                  if (w < 1 || h < 1) return;
+                  if (x < 0) x = w/2f;
+                  if (y < 0) y = h/2f;
+                  x = Math.min(w-8, Math.max(8, x+dx));
+                  y = Math.min(h-8, Math.max(8, y+dy));
                   cursor.invalidate();
               }
-              private void tap(){
-                  View target=fullscreen!=null?fullscreen:web;
-                  if(target==null||x<0)return;
-                  int[] p=new int[2],q=new int[2];
+              private void tap() {
+                  View target = video != null ? video : web;
+                  if (target == null || x < 0) return;
+                  int[] p = new int[2], q = new int[2];
                   root.getLocationOnScreen(p);
                   target.getLocationOnScreen(q);
-                  float tx=x+p[0]-q[0],ty=y+p[1]-q[1];
-                  long t=SystemClock.uptimeMillis();
-                  MotionEvent down=MotionEvent.obtain(t,t,MotionEvent.ACTION_DOWN,tx,ty,0);
-                  MotionEvent up=MotionEvent.obtain(t,t+50,MotionEvent.ACTION_UP,tx,ty,0);
+                  float tx = x+p[0]-q[0], ty = y+p[1]-q[1];
+                  long t = SystemClock.uptimeMillis();
+                  MotionEvent down = MotionEvent.obtain(t,t,MotionEvent.ACTION_DOWN,tx,ty,0);
+                  MotionEvent up = MotionEvent.obtain(t,t+50,MotionEvent.ACTION_UP,tx,ty,0);
                   target.dispatchTouchEvent(down);
                   target.dispatchTouchEvent(up);
-                  down.recycle();up.recycle();
+                  down.recycle();
+                  up.recycle();
               }
-              @Override public boolean dispatchKeyEvent(KeyEvent e){
-                  int k=e.getKeyCode();
-                  if((k==KeyEvent.KEYCODE_MENU||k==KeyEvent.KEYCODE_SETTINGS) && e.getAction()==KeyEvent.ACTION_UP){
-                      menu();return true;
+              private void nav(String direction) {
+                  if (video != null) return;
+                  web.evaluateJavascript("window.__cinejoyFocus&&window.__cinejoyFocus('" + direction + "');", null);
+              }
+              @Override public boolean dispatchKeyEvent(KeyEvent e) {
+                  int key = e.getKeyCode();
+                  if (key == KeyEvent.KEYCODE_MENU || key == KeyEvent.KEYCODE_SETTINGS) {
+                      if (e.getAction() == KeyEvent.ACTION_UP) menu();
+                      return true;
                   }
-                  if(k==KeyEvent.KEYCODE_MENU||k==KeyEvent.KEYCODE_SETTINGS)return true;
-                  if(cursorMode){
-                      if(e.getAction()==KeyEvent.ACTION_DOWN){
-                          float step=dp(Math.min(150,56+9*e.getRepeatCount()));
-                          switch(k){
-                              case KeyEvent.KEYCODE_DPAD_LEFT:move(-step,0);return true;
-                              case KeyEvent.KEYCODE_DPAD_RIGHT:move(step,0);return true;
-                              case KeyEvent.KEYCODE_DPAD_UP:move(0,-step);return true;
-                              case KeyEvent.KEYCODE_DPAD_DOWN:move(0,step);return true;
+                  if (pointerMode) {
+                      if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                          float step = dp(Math.min(150,56 + 9 * e.getRepeatCount()));
+                          switch (key) {
+                              case KeyEvent.KEYCODE_DPAD_LEFT: move(-step,0);return true;
+                              case KeyEvent.KEYCODE_DPAD_RIGHT: move(step,0);return true;
+                              case KeyEvent.KEYCODE_DPAD_UP: move(0,-step);return true;
+                              case KeyEvent.KEYCODE_DPAD_DOWN: move(0,step);return true;
                               case KeyEvent.KEYCODE_DPAD_CENTER:
-                              case KeyEvent.KEYCODE_ENTER:if(e.getRepeatCount()==0)tap();return true;
+                              case KeyEvent.KEYCODE_ENTER:
+                                  if (e.getRepeatCount() == 0) tap();
+                                  return true;
                           }
-                      }else if(e.getAction()==KeyEvent.ACTION_UP){
-                          if(k==KeyEvent.KEYCODE_DPAD_LEFT||k==KeyEvent.KEYCODE_DPAD_RIGHT||
-                             k==KeyEvent.KEYCODE_DPAD_UP||k==KeyEvent.KEYCODE_DPAD_DOWN||
-                             k==KeyEvent.KEYCODE_DPAD_CENTER||k==KeyEvent.KEYCODE_ENTER)return true;
+                      } else if (e.getAction() == KeyEvent.ACTION_UP) {
+                          if (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                              key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN ||
+                              key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER)
+                              return true;
+                      }
+                  } else if (video == null) {
+                      if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                          switch (key) {
+                              case KeyEvent.KEYCODE_DPAD_LEFT: nav("left"); return true;
+                              case KeyEvent.KEYCODE_DPAD_RIGHT: nav("right"); return true;
+                              case KeyEvent.KEYCODE_DPAD_UP: nav("up"); return true;
+                              case KeyEvent.KEYCODE_DPAD_DOWN: nav("down"); return true;
+                              case KeyEvent.KEYCODE_DPAD_CENTER:
+                              case KeyEvent.KEYCODE_ENTER:
+                                  web.evaluateJavascript("window.__cinejoySelect&&window.__cinejoySelect();",null);
+                                  return true;
+                          }
+                      }
+                      if (e.getAction() == KeyEvent.ACTION_UP) {
+                          if (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                              key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN ||
+                              key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER)
+                              return true;
                       }
                   }
                   return super.dispatchKeyEvent(e);
               }
-              private void closeVideo(){
-                  if(fullscreen==null)return;
-                  root.removeView(fullscreen);
-                  fullscreen=null;
+              private void closeVideo() {
+                  if (video == null) return;
+                  root.removeView(video);
+                  video = null;
                   web.setVisibility(View.VISIBLE);
-                  if(fullscreenCallback!=null){
-                      WebChromeClient.CustomViewCallback cb=fullscreenCallback;
-                      fullscreenCallback=null;
+                  if (videoCallback != null) {
+                      WebChromeClient.CustomViewCallback cb = videoCallback;
+                      videoCallback = null;
                       cb.onCustomViewHidden();
                   }
                   immersive();
               }
-              @Override @SuppressWarnings("deprecation") public void onBackPressed(){
-                  if(fullscreen!=null){closeVideo();return;}
-                  if(web.canGoBack()){web.goBack();return;}
+              @Override @SuppressWarnings("deprecation") public void onBackPressed() {
+                  if (video != null) { closeVideo(); return; }
+                  if (web.canGoBack()) { web.goBack(); return; }
                   menu();
               }
-              private void menu(){
-                  String mode=cursorMode?"Use D-pad focus mode":"Use remote cursor mode";
+              private void menu() {
+                  final String mode = pointerMode ? "Use clean remote navigation" : "Enable pointer (for difficult players)";
                   new AlertDialog.Builder(this).setTitle("Cinejoy TV")
-                  .setItems(new String[]{"Reload","Home",mode,"Exit"},(d,n)->{
-                      switch(n){
-                          case 0:web.reload();break;
-                          case 1:web.loadUrl(URL);break;
-                          case 2:cursorMode=!cursorMode;cursor.setVisibility(cursorMode?View.VISIBLE:View.GONE);web.requestFocus();break;
-                          case 3:finish();break;
-                      }
-                  }).show();
+                      .setItems(new String[]{"Home","Reload",mode,"Exit"}, (d,n) -> {
+                          switch (n) {
+                              case 0: web.loadUrl(URL); break;
+                              case 1: web.reload(); break;
+                              case 2:
+                                  pointerMode = !pointerMode;
+                                  cursor.setVisibility(pointerMode ? View.VISIBLE : View.GONE);
+                                  web.requestFocus();
+                                  break;
+                              case 3: finish(); break;
+                          }
+                      }).show();
               }
-              @Override protected void onPause(){super.onPause();if(web!=null)web.onPause();}
-              @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
-              @Override protected void onDestroy(){
-                  if(fullscreen!=null)closeVideo();
-                  if(web!=null){
+              @Override protected void onPause() { super.onPause(); if(web != null) web.onPause(); }
+              @Override protected void onResume() { super.onResume(); if(web != null) web.onResume(); }
+              @Override protected void onDestroy() {
+                  if (video != null) closeVideo();
+                  if (web != null) {
                       web.stopLoading();
                       web.loadUrl("about:blank");
                       root.removeView(web);
                       web.destroy();
-                      web=null;
+                      web = null;
                   }
                   super.onDestroy();
               }
-              private final class Cursor extends View{
-                  private final Paint ring=new Paint(Paint.ANTI_ALIAS_FLAG);
-                  private final Paint dot=new Paint(Paint.ANTI_ALIAS_FLAG);
-                  Cursor(){
+              private final class Cursor extends View {
+                  private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+                  private final Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
+                  Cursor() {
                       super(MainActivity.this);
                       setFocusable(false);
                       setClickable(false);
@@ -296,8 +367,8 @@ jobs:
                       ring.setColor(Color.WHITE);
                       dot.setColor(Color.rgb(90,204,250));
                   }
-                  @Override protected void onDraw(Canvas c){
-                      if(cursorMode&&x>=0&&y>=0){
+                  @Override protected void onDraw(Canvas c) {
+                      if (pointerMode && x >= 0 && y >= 0) {
                           c.drawCircle(x,y,dp(11),ring);
                           c.drawCircle(x,y,dp(3.5f),dot);
                       }
@@ -317,6 +388,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cinejoy-TV-APK
+          name: Cinejoy-TV-V2-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
