@@ -1,4 +1,4 @@
-name: Build Cinejoy TV APK V4
+name: Build Cinejoy TV V4 with New Icon
 on:
   push:
     branches:
@@ -28,7 +28,7 @@ jobs:
       - name: Generate TV app
         shell: bash
         run: |
-          mkdir -p app/src/main/java/com/personal/tvweblauncher app/src/main/res/drawable
+          mkdir -p app/src/main/java/com/personal/tvweblauncher app/src/main/res/drawable app/src/main/res/drawable-nodpi
           cat > 'settings.gradle' <<'CINEJOY_FILE_END'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
@@ -47,8 +47,8 @@ jobs:
               applicationId 'com.personal.tvweblauncher'
               minSdk 23
               targetSdk 32
-              versionCode 4
-              versionName '4.0'
+              versionCode 5
+              versionName '4.1'
             }
             compileOptions {
               sourceCompatibility JavaVersion.VERSION_17
@@ -62,7 +62,7 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-feature android:name="android.software.leanback" android:required="false"/>
               <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
-              <application android:label="Cinejoy TV" android:icon="@android:drawable/ic_media_play"
+              <application android:label="Cinejoy TV" android:icon="@drawable/app_icon"
                 android:allowBackup="false" android:usesCleartextTraffic="false" android:hardwareAccelerated="true"
                 android:theme="@android:style/Theme.Material.NoActionBar">
                 <activity android:name=".MainActivity" android:exported="true"
@@ -410,11 +410,16 @@ jobs:
             <corners android:radius="12dp"/>
           </shape>
           CINEJOY_FILE_END
+      - name: Add custom Cinejoy TV app icon
+        shell: bash
+        run: |
+          printf '%s' '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' | base64 --decode > app/src/main/res/drawable-nodpi/app_icon.png
+          file app/src/main/res/drawable-nodpi/app_icon.png
       - name: Compile debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cinejoy-TV-V4-APK
+          name: Cinejoy-TV-V4-New-Icon-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
