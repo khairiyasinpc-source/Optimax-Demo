@@ -1,4 +1,4 @@
-name: Build Cinejoy TV V4 with New Icon
+name: Build Cinejoy TV V4.2 Playback Test
 on:
   push:
     branches:
@@ -47,8 +47,8 @@ jobs:
               applicationId 'com.personal.tvweblauncher'
               minSdk 23
               targetSdk 32
-              versionCode 5
-              versionName '4.1'
+              versionCode 6
+              versionName '4.2'
             }
             compileOptions {
               sourceCompatibility JavaVersion.VERSION_17
@@ -85,6 +85,7 @@ jobs:
           
           import android.app.Activity;
           import android.app.AlertDialog;
+          import android.content.Intent;
           import android.graphics.Canvas;
           import android.graphics.Color;
           import android.graphics.Paint;
@@ -130,11 +131,13 @@ jobs:
               private float x = -1, y = -1;
               private boolean pointerMode = false;
               private volatile boolean adBlockEnabled = true;
+              private boolean compatibilityCookies = true;
               private boolean backMenuHandled = false;
           
               @Override public void onCreate(Bundle state) {
                   super.onCreate(state);
                   adBlockEnabled = getPreferences(MODE_PRIVATE).getBoolean("ad_block", true);
+                  compatibilityCookies = getPreferences(MODE_PRIVATE).getBoolean("player_cookies", true);
                   immersive();
                   root = new FrameLayout(this);
                   root.setBackgroundColor(Color.rgb(7,10,18));
@@ -153,7 +156,7 @@ jobs:
                   s.setDomStorageEnabled(true);
                   s.setMediaPlaybackRequiresUserGesture(false);
                   s.setJavaScriptCanOpenWindowsAutomatically(false);
-                  s.setSupportMultipleWindows(true);
+                  s.setSupportMultipleWindows(false);
                   s.setAllowFileAccess(false);
                   s.setAllowContentAccess(false);
                   s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -165,13 +168,20 @@ jobs:
                   s.setLoadsImagesAutomatically(true);
                   if (Build.VERSION.SDK_INT >= 26) s.setSafeBrowsingEnabled(true);
                   CookieManager.getInstance().setAcceptCookie(true);
-                  CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+                  CookieManager.getInstance().setAcceptThirdPartyCookies(web, compatibilityCookies);
           
                   web.setWebViewClient(new WebViewClient() {
                       @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
-                          return req.isForMainFrame() && !allowed(req.getUrl());
+                          if (!req.isForMainFrame()) return false;
+                          Uri u = req.getUrl();
+                          if (allowed(u)) return false;
+                          if (isSafePlayerLink(u) && req.hasGesture()) {
+                              confirmExternalPlayerLink(u);
+                          }
+                          return true;
                       }
                       @Override public boolean shouldOverrideUrlLoading(WebView v, String u) {
+                          // Android TV 2025 uses the WebResourceRequest override above.
                           return !allowed(Uri.parse(u));
                       }
                       @Override public void onPageFinished(WebView v, String u) {
@@ -190,11 +200,6 @@ jobs:
                       }
                   });
                   web.setWebChromeClient(new WebChromeClient() {
-                      @Override public boolean onCreateWindow(WebView v, boolean dialog,
-                          boolean userGesture, android.os.Message resultMsg) {
-                          // Reject extra popup windows and advertising tabs.
-                          return false;
-                      }
                       @Override public void onShowCustomView(View v, CustomViewCallback cb) {
                           if (video != null) { cb.onCustomViewHidden(); return; }
                           video = v;
@@ -228,6 +233,39 @@ jobs:
                   String h = u.getHost().toLowerCase(Locale.ROOT);
                   return h.equals("cinejoy.pk") || h.endsWith(".cinejoy.pk");
               }
+              private static boolean isSafePlayerLink(Uri uri) {
+                  return uri != null && "https".equalsIgnoreCase(uri.getScheme())
+                      && uri.getHost() != null && !isBlocked(uri.getHost());
+              }
+              private void confirmExternalPlayerLink(Uri uri) {
+                  String host = uri.getHost();
+                  if (host == null) return;
+                  new AlertDialog.Builder(this)
+                      .setTitle("External video player")
+                      .setMessage("This movie wants to open " + host + ". Only continue if you trust the video source.")
+                      .setPositiveButton("Open in app", (d,w) -> {
+                          web.loadUrl(uri.toString());
+                      })
+                      .setNeutralButton("Browser", (d,w) -> {
+                          try {
+                              startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                          } catch (Exception e) {
+                              Toast.makeText(this,"No compatible TV browser found",Toast.LENGTH_SHORT).show();
+                          }
+                      })
+                      .setNegativeButton("Cancel",null)
+                      .show();
+              }
+              private void openCurrentInBrowser() {
+                  Uri u = Uri.parse(web.getUrl() == null ? URL : web.getUrl());
+                  if (!isSafePlayerLink(u)) return;
+                  try {
+                      startActivity(new Intent(Intent.ACTION_VIEW,u));
+                  } catch(Exception e) {
+                      Toast.makeText(this,"No compatible TV browser installed",Toast.LENGTH_LONG).show();
+                  }
+              }
+
               private void immersive() {
                   getWindow().getDecorView().setSystemUiVisibility(
                       View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
@@ -346,30 +384,55 @@ jobs:
                   menu();
               }
               private void menu() {
-                  final String pointer = pointerMode ? "Hide pointer / Clean D-pad" : "Enable pointer fallback";
-                  final String ads = adBlockEnabled ? "Ad blocker: ON (tap to turn OFF)" : "Ad blocker: OFF (tap to turn ON)";
+                  final String pointer = pointerMode ? "Pointer: ON (switch to clean D-pad)" : "Pointer: OFF (fallback)";
+                  final String ads = adBlockEnabled ? "Ad filter: ON" : "Ad filter: OFF";
+                  final String cookies = compatibilityCookies ? "Player cookies: ON" : "Player cookies: OFF";
                   new AlertDialog.Builder(this)
-                      .setTitle("Cinejoy TV  •  Quick Settings")
-                      .setItems(new String[]{"Home", "Reload", pointer, ads, "Exit"}, (d,n) -> {
-                          switch (n) {
+                      .setTitle("Cinejoy TV V4.2  •  Quick Settings")
+                      .setItems(new String[]{
+                          "Home",
+                          "Reload this movie",
+                          "Retry video with compatibility settings",
+                          ads,
+                          cookies,
+                          "Open this movie in TV browser",
+                          pointer,
+                          "Exit"
+                      },(d,n) -> {
+                          switch(n) {
                               case 0: web.loadUrl(URL); break;
                               case 1: web.reload(); break;
                               case 2:
+                                  // Debugging mode: ad requests are no longer filtered.
+                                  // The user knowingly opts into cross-site player cookies.
+                                  adBlockEnabled = false;
+                                  compatibilityCookies = true;
+                                  CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
+                                  web.reload();
+                                  Toast.makeText(this,"Compatibility retry ON. Ad filter temporarily OFF",Toast.LENGTH_LONG).show();
+                                  break;
+                              case 3:
+                                  adBlockEnabled = !adBlockEnabled;
+                                  getPreferences(MODE_PRIVATE).edit().putBoolean("ad_block",adBlockEnabled).apply();
+                                  web.reload();
+                                  break;
+                              case 4:
+                                  compatibilityCookies = !compatibilityCookies;
+                                  getPreferences(MODE_PRIVATE).edit().putBoolean("player_cookies",compatibilityCookies).apply();
+                                  CookieManager.getInstance().setAcceptThirdPartyCookies(web,compatibilityCookies);
+                                  web.reload();
+                                  break;
+                              case 5: openCurrentInBrowser(); break;
+                              case 6:
                                   pointerMode = !pointerMode;
                                   cursor.setVisibility(pointerMode ? View.VISIBLE : View.GONE);
                                   web.requestFocus();
                                   break;
-                              case 3:
-                                  adBlockEnabled = !adBlockEnabled;
-                                  getPreferences(MODE_PRIVATE).edit().putBoolean("ad_block", adBlockEnabled).apply();
-                                  web.reload();
-                                  Toast.makeText(this, adBlockEnabled ? "Ad filter ON" : "Ad filter OFF", Toast.LENGTH_SHORT).show();
-                                  break;
-                              case 4: finish(); break;
+                              case 7: finish(); break;
                           }
                       }).show();
               }
-                            @Override protected void onPause() { super.onPause(); if(web != null) web.onPause(); }
+              @Override protected void onPause() { super.onPause(); if(web != null) web.onPause(); }
               @Override protected void onResume() { super.onResume(); if(web != null) web.onResume(); }
               @Override protected void onDestroy() {
                   if (video != null) closeVideo();
@@ -420,6 +483,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cinejoy-TV-V4-New-Icon-APK
+          name: Cinejoy-TV-V4.2-Playback-Test-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
